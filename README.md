@@ -8,10 +8,13 @@ Currently supports [AssemblyAI](https://www.assemblyai.com) with speaker diariza
 
 ```bash
 # With uv (recommended)
-uv tool install transcribe-cli
+uv tool install transcriber-cli
 
 # With pip
-pip install transcribe-cli
+pip install transcriber-cli
+
+# Run without installing
+uvx transcriber-cli audio.mp3
 ```
 
 Or install from source:
