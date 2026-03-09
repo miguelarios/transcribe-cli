@@ -10,6 +10,18 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [{ name = "Miguel Rios" }]
+keywords = ["transcription", "audio", "assemblyai", "cli", "diarization"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+]
 
 dependencies = [
     "click>=8.1",
@@ -21,6 +33,11 @@ dev = ["pytest", "ruff"]
 
 [project.scripts]
 transcribe = "transcribe_cli.cli:cli"
+
+[project.urls]
+Homepage = "https://github.com/miguelarios/transcribe-cli"
+Repository = "https://github.com/miguelarios/transcribe-cli"
+Issues = "https://github.com/miguelarios/transcribe-cli/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/transcribe_cli"]
