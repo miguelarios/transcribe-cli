@@ -1,22 +1,29 @@
-[project]
-name = "transcribe"
-version = "0.1.0"
-description = "Audio transcription and speaker diarization CLI tool using AssemblyAI"
-readme = "README.md"
-requires-python = ">=3.8"
-authors = [
-    { name = "Miguel Rios" }
-]
-dependencies = [
-    "assemblyai>=0.17.0",
-]
-
-[project.scripts]
-transcribe = "transcribe:main"
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[project]
+name = "transcribe-cli"
+version = "0.1.0"
+description = "A modular transcription CLI with pluggable providers. Agent-friendly."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "Miguel Rios" }]
+
+dependencies = [
+    "click>=8.1",
+    "assemblyai>=0.30",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[project.scripts]
+transcribe = "transcribe_cli.cli:cli"
+
 [tool.hatch.build.targets.wheel]
-packages = ["."]
+packages = ["src/transcribe_cli"]
+
+[tool.ruff]
+line-length = 100
