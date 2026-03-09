@@ -14,7 +14,7 @@ uv tool install transcriber-cli
 pip install transcriber-cli
 
 # Run without installing
-uvx transcriber-cli audio.mp3
+uvx --from transcriber-cli transcribe audio.mp3
 ```
 
 Or install from source:
