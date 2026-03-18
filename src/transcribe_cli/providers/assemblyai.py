@@ -148,7 +148,7 @@ class AssemblyAIProvider(TranscriptionProvider):
                     seg.sentiment = utt.sentiment.value
                 segments.append(seg)
         elif timestamps:
-            for sent in transcript.sentences():
+            for sent in transcript.get_sentences():
                 segments.append(
                     Segment(
                         text=sent.text,

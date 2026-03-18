@@ -53,13 +53,13 @@ def test_transcribe_basic(mock_aai):
     mock_transcript.summary = None
     mock_transcript.sentiment_analysis = None
 
-    # Mock sentences() for segment extraction
+    # Mock get_sentences() for segment extraction
     mock_sentence = MagicMock()
     mock_sentence.text = "Hello world"
     mock_sentence.start = 0
     mock_sentence.end = 5000
     mock_sentence.confidence = 0.95
-    mock_transcript.sentences.return_value = [mock_sentence]
+    mock_transcript.get_sentences.return_value = [mock_sentence]
 
     mock_transcriber = MagicMock()
     mock_transcriber.transcribe.return_value = mock_transcript
