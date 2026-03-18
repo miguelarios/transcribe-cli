@@ -141,12 +141,14 @@ def test_to_summary():
     assert "file" in summary
     assert summary["file"].endswith(".json")
 
-    # With explicit output_path, transcript is written there instead of temp
+    # With explicit output_path and content, transcript text is written there
     import tempfile as _tf
-    with _tf.NamedTemporaryFile(suffix=".json", delete=False) as f:
-        out_path = f.name
-    summary2 = result.to_summary(output_path=out_path)
-    assert summary2["file"] == out_path
     from pathlib import Path
-    assert Path(out_path).exists()
+    with _tf.NamedTemporaryFile(suffix=".md", delete=False) as f:
+        out_path = f.name
+    formatted = result.to_text()
+    summary2 = result.to_summary(output_path=out_path, output_content=formatted)
+    assert summary2["file"] == out_path
+    written = Path(out_path).read_text()
+    assert written == formatted
     Path(out_path).unlink()

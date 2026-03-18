@@ -105,19 +105,21 @@ class TranscriptionResult:
             lines.append("")
         return "\n".join(lines)
 
-    def to_summary(self, output_path: str | None = None) -> dict:
+    def to_summary(self, output_path: str | None = None, output_content: str | None = None) -> dict:
         """Generate agent-friendly summary metadata, save full transcript to file.
 
-        If output_path is provided, the full transcript is written there.
-        Otherwise, it is saved to a temp file.
+        If output_path is provided, the transcript is written there using
+        output_content (the formatted transcript). Otherwise, the full JSON
+        payload is saved to a temp file.
         """
         if output_path:
             out_file = Path(output_path)
+            out_file.write_text(output_content or self.to_text(), encoding="utf-8")
         else:
             tmp_dir = Path(tempfile.gettempdir()) / "transcribe-cli"
             tmp_dir.mkdir(parents=True, exist_ok=True)
             out_file = tmp_dir / f"{self.metadata.get('id', 'transcript')}.json"
-        out_file.write_text(json.dumps(self.to_dict(), indent=2, ensure_ascii=False))
+            out_file.write_text(json.dumps(self.to_dict(), indent=2, ensure_ascii=False))
 
         word_count = len(self.text.split())
         speakers = {s.speaker for s in self.segments if s.speaker}

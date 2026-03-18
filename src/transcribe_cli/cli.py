@@ -244,7 +244,19 @@ def cli(
         )
 
         if summary_mode:
-            click.echo(json.dumps(result.to_summary(output_path=output), indent=2))
+            # Format the transcript content for the output file
+            if output:
+                if output_format == "json":
+                    content = json.dumps(result.to_dict(), indent=2, ensure_ascii=False)
+                elif output_format == "srt":
+                    content = result.to_srt()
+                elif output_format == "vtt":
+                    content = result.to_vtt()
+                else:
+                    content = result.to_text()
+            else:
+                content = None
+            click.echo(json.dumps(result.to_summary(output_path=output, output_content=content), indent=2))
         else:
             _emit_result(result, output_format, output, verbose)
 
