@@ -140,3 +140,13 @@ def test_to_summary():
     assert summary["provider"] == "assemblyai"
     assert "file" in summary
     assert summary["file"].endswith(".json")
+
+    # With explicit output_path, transcript is written there instead of temp
+    import tempfile as _tf
+    with _tf.NamedTemporaryFile(suffix=".json", delete=False) as f:
+        out_path = f.name
+    summary2 = result.to_summary(output_path=out_path)
+    assert summary2["file"] == out_path
+    from pathlib import Path
+    assert Path(out_path).exists()
+    Path(out_path).unlink()

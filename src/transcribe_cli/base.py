@@ -105,18 +105,25 @@ class TranscriptionResult:
             lines.append("")
         return "\n".join(lines)
 
-    def to_summary(self) -> dict:
-        """Generate agent-friendly summary metadata, save full transcript to temp file."""
-        tmp_dir = Path(tempfile.gettempdir()) / "transcribe-cli"
-        tmp_dir.mkdir(parents=True, exist_ok=True)
-        tmp_file = tmp_dir / f"{self.metadata.get('id', 'transcript')}.json"
-        tmp_file.write_text(json.dumps(self.to_dict(), indent=2, ensure_ascii=False))
+    def to_summary(self, output_path: str | None = None) -> dict:
+        """Generate agent-friendly summary metadata, save full transcript to file.
+
+        If output_path is provided, the full transcript is written there.
+        Otherwise, it is saved to a temp file.
+        """
+        if output_path:
+            out_file = Path(output_path)
+        else:
+            tmp_dir = Path(tempfile.gettempdir()) / "transcribe-cli"
+            tmp_dir.mkdir(parents=True, exist_ok=True)
+            out_file = tmp_dir / f"{self.metadata.get('id', 'transcript')}.json"
+        out_file.write_text(json.dumps(self.to_dict(), indent=2, ensure_ascii=False))
 
         word_count = len(self.text.split())
         speakers = {s.speaker for s in self.segments if s.speaker}
 
         return {
-            "file": str(tmp_file),
+            "file": str(out_file),
             "word_count": word_count,
             "token_count": int(word_count * 1.3),  # rough estimate
             "speaker_count": len(speakers),

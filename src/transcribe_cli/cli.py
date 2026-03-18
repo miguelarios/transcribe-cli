@@ -244,7 +244,7 @@ def cli(
         )
 
         if summary_mode:
-            click.echo(json.dumps(result.to_summary(), indent=2))
+            click.echo(json.dumps(result.to_summary(output_path=output), indent=2))
         else:
             _emit_result(result, output_format, output, verbose)
 
