@@ -133,15 +133,25 @@ class AssemblyAIProvider(TranscriptionProvider):
         if transcript.status == aai.TranscriptStatus.error:
             raise RuntimeError(f"AssemblyAI error: {transcript.error}")
 
-        # Build segments from utterances (if speaker_labels) or sentences
+        # Build segments from utterances (if speaker_labels or multichannel) or sentences
+        channel_names = kwargs.get("channel_names")
         segments = []
-        if timestamps and speaker_labels and transcript.utterances:
+        if timestamps and (speaker_labels or multichannel) and transcript.utterances:
             for utt in transcript.utterances:
+                # Determine speaker label: channel name > channel number > speaker ID
+                if multichannel and hasattr(utt, "channel") and utt.channel is not None:
+                    ch = utt.channel
+                    if channel_names and len(channel_names) >= int(ch):
+                        speaker = channel_names[int(ch) - 1]
+                    else:
+                        speaker = f"Channel {ch}"
+                else:
+                    speaker = utt.speaker
                 seg = Segment(
                     text=utt.text,
                     start=utt.start / 1000.0,
                     end=utt.end / 1000.0,
-                    speaker=utt.speaker,
+                    speaker=speaker,
                     confidence=utt.confidence,
                 )
                 if sentiment and hasattr(utt, "sentiment") and utt.sentiment:

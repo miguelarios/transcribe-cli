@@ -99,6 +99,9 @@ def _emit_result(result, fmt: str, output: str | None, verbose: bool):
               help="Context prompt for transcription. [API: prompt]")
 @click.option("--multichannel", is_flag=True, default=False, show_default=True,
               help="Enable multichannel transcription. [API: multichannel]")
+@click.option("--channel-names", multiple=True,
+              help="Map channel numbers to names (repeatable, order = channel number). "
+                   "E.g., --channel-names Miguel --channel-names Justin")
 @click.option("--redact-pii", is_flag=True, default=False, show_default=True,
               help="Redact PII from transcript. [API: redact_pii]")
 @click.option("--filter-profanity", is_flag=True, default=False, show_default=True,
@@ -141,6 +144,7 @@ def cli(
     language_detection,
     prompt,
     multichannel,
+    channel_names,
     redact_pii,
     filter_profanity,
     disfluencies,
@@ -233,6 +237,7 @@ def cli(
             summary_type=summary_type,
             content_safety=content_safety,
             multichannel=multichannel,
+            channel_names=list(channel_names) if channel_names else None,
             redact_pii=redact_pii,
             filter_profanity=filter_profanity,
             disfluencies=disfluencies,

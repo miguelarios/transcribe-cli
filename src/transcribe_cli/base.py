@@ -65,7 +65,8 @@ class TranscriptionResult:
         for seg in self.segments:
             ts = _fmt_timestamp(seg.start)
             if seg.speaker:
-                lines.append(f"[{ts}] Speaker {seg.speaker}: {seg.text.strip()}")
+                label = _fmt_speaker(seg.speaker)
+                lines.append(f"[{ts}] {label}: {seg.text.strip()}")
             else:
                 lines.append(f"[{ts}] {seg.text.strip()}")
         return "\n".join(lines)
@@ -81,7 +82,7 @@ class TranscriptionResult:
             end = _fmt_srt_time(seg.end)
             text = seg.text.strip()
             if seg.speaker:
-                text = f"Speaker {seg.speaker}: {text}"
+                text = f"{_fmt_speaker(seg.speaker)}: {text}"
             lines.append(f"{i}")
             lines.append(f"{start} --> {end}")
             lines.append(text)
@@ -99,7 +100,7 @@ class TranscriptionResult:
             end = _fmt_vtt_time(seg.end)
             text = seg.text.strip()
             if seg.speaker:
-                text = f"Speaker {seg.speaker}: {text}"
+                text = f"{_fmt_speaker(seg.speaker)}: {text}"
             lines.append(f"{start} --> {end}")
             lines.append(text)
             lines.append("")
@@ -133,6 +134,13 @@ class TranscriptionResult:
             "language": self.language,
             "provider": self.provider,
         }
+
+
+def _fmt_speaker(label: str) -> str:
+    """Format a speaker label — prefix short diarization IDs with 'Speaker'."""
+    if len(label) <= 2 and label.isalpha():
+        return f"Speaker {label}"
+    return label
 
 
 def _fmt_timestamp(seconds: float) -> str:
