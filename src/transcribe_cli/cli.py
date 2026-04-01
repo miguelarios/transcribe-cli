@@ -195,6 +195,16 @@ def cli(
             "Must specify both --min-speakers and --max-speakers together."
         )
 
+    # Validate channel-names for multichannel-only mode (no speaker diarization)
+    if multichannel and not speaker_labels and not speakers_expected:
+        if channel_names and len(channel_names) != 2:
+            raise click.UsageError(
+                "--multichannel expects exactly 2 channel names (left and right). "
+                f"Got {len(channel_names)}."
+            )
+        if not channel_names:
+            channel_names = ("Me", "Them")
+
     # Validate file exists (skip for URLs)
     if not _is_url(audio) and not Path(audio).exists():
         raise click.UsageError(f"File not found: {audio}")

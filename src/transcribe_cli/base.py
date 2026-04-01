@@ -62,13 +62,17 @@ class TranscriptionResult:
             return self.text
 
         lines = []
+        prev_speaker = None
         for seg in self.segments:
             ts = _fmt_timestamp(seg.start)
             if seg.speaker:
+                if prev_speaker is not None and seg.speaker != prev_speaker:
+                    lines.append("")
                 label = _fmt_speaker(seg.speaker)
                 lines.append(f"[{ts}] {label}: {seg.text.strip()}")
             else:
                 lines.append(f"[{ts}] {seg.text.strip()}")
+            prev_speaker = seg.speaker
         return "\n".join(lines)
 
     def to_srt(self) -> str:
