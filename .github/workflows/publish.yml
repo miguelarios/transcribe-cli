@@ -6,7 +6,16 @@ on:
       - "v*"
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv run --extra dev pytest tests/
+      - run: uv run --extra dev ruff check src/ tests/
+
   publish:
+    needs: test
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
