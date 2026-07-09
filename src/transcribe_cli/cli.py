@@ -104,6 +104,10 @@ def _emit_result(result, fmt: str, output: str | None, verbose: bool):
                    "E.g., --channel-names Miguel --channel-names Justin")
 @click.option("--redact-pii", is_flag=True, default=False, show_default=True,
               help="Redact PII from transcript. [API: redact_pii]")
+@click.option("--redact-policies", multiple=True,
+              help="PII policies to redact (repeatable, use with --redact-pii). "
+                   "E.g., person_name, phone_number, email_address, location. "
+                   "Defaults to a common-PII set. [API: redact_pii_policies]")
 @click.option("--filter-profanity", is_flag=True, default=False, show_default=True,
               help="Filter profanity. [API: filter_profanity]")
 @click.option("--disfluencies", is_flag=True, default=False, show_default=True,
@@ -146,6 +150,7 @@ def cli(
     multichannel,
     channel_names,
     redact_pii,
+    redact_policies,
     filter_profanity,
     disfluencies,
     keyterms,
@@ -249,6 +254,7 @@ def cli(
             multichannel=multichannel,
             channel_names=list(channel_names) if channel_names else None,
             redact_pii=redact_pii,
+            redact_policies=list(redact_policies) if redact_policies else None,
             filter_profanity=filter_profanity,
             disfluencies=disfluencies,
             prompt=prompt,

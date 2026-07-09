@@ -6,6 +6,7 @@ import pytest
 from click.testing import CliRunner
 from unittest.mock import patch
 
+from transcribe_cli import __version__
 from transcribe_cli.cli import cli
 
 
@@ -23,7 +24,7 @@ def test_help(runner):
 def test_version(runner):
     result = runner.invoke(cli, ["--version"])
     assert result.exit_code == 0
-    assert "0.1.4" in result.output
+    assert __version__ in result.output
 
 
 def test_list_providers(runner):

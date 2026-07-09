@@ -22,10 +22,12 @@ def get_provider(name: str, **kwargs) -> TranscriptionProvider:
     cls = _PROVIDERS[name]
     if not cls.is_available():
         extras = cls.required_extras()
-        raise RuntimeError(
-            f"Provider '{name}' dependencies not installed. "
-            f"Install with: pip install 'transcribe-cli[{extras}]'"
+        hint = (
+            f"Install with: pip install 'transcriber-cli[{extras}]'"
+            if extras
+            else "Reinstall with: pip install transcriber-cli"
         )
+        raise RuntimeError(f"Provider '{name}' dependencies not installed. {hint}")
 
     return cls(**kwargs)
 

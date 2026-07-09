@@ -10,6 +10,21 @@ import assemblyai as aai
 from transcribe_cli.base import Segment, TranscriptionProvider, TranscriptionResult
 from transcribe_cli.providers import register
 
+# Default PII policies when --redact-pii is enabled without explicit policies.
+# The API requires redact_pii_policies whenever redact_pii is true; this set
+# mirrors AssemblyAI's contact-center example.
+DEFAULT_REDACT_POLICIES = [
+    "person_name",
+    "phone_number",
+    "email_address",
+    "account_number",
+    "us_social_security_number",
+    "credit_card_number",
+    "credit_card_cvv",
+    "credit_card_expiration",
+    "date_of_birth",
+]
+
 
 @register
 class AssemblyAIProvider(TranscriptionProvider):
@@ -53,6 +68,7 @@ class AssemblyAIProvider(TranscriptionProvider):
         content_safety: bool = False,
         multichannel: bool = False,
         redact_pii: bool = False,
+        redact_policies: list[str] | None = None,
         filter_profanity: bool = False,
         disfluencies: bool = False,
         prompt: str | None = None,
@@ -79,6 +95,10 @@ class AssemblyAIProvider(TranscriptionProvider):
             "format_text": format_text,
             "language_detection": language_detection,
         }
+
+        if redact_pii:
+            # The API rejects redact_pii=true without policies
+            config_kwargs["redact_pii_policies"] = redact_policies or DEFAULT_REDACT_POLICIES
 
         if language and not language_detection:
             config_kwargs["language_code"] = language
@@ -115,12 +135,16 @@ class AssemblyAIProvider(TranscriptionProvider):
         if keyterms:
             config_kwargs["keyterms_prompt"] = keyterms
 
-        # Speech understanding: speaker identification
+        # Speech understanding: speaker identification.
+        # The API shape requires a "request" wrapper and speaker_labels enabled.
         if speaker_id_type and speaker_names:
+            config_kwargs["speaker_labels"] = True
             config_kwargs["speech_understanding"] = {
-                "speaker_identification": {
-                    "speaker_type": speaker_id_type,
-                    "known_values": speaker_names,
+                "request": {
+                    "speaker_identification": {
+                        "speaker_type": speaker_id_type,
+                        "known_values": speaker_names,
+                    }
                 }
             }
 
@@ -139,10 +163,15 @@ class AssemblyAIProvider(TranscriptionProvider):
         if timestamps and (speaker_labels or multichannel) and transcript.utterances:
             for utt in transcript.utterances:
                 # Determine speaker label: channel name > channel number > speaker ID
-                if multichannel and hasattr(utt, "channel") and utt.channel is not None:
-                    ch = utt.channel
-                    if channel_names and len(channel_names) >= int(ch):
-                        speaker = channel_names[int(ch) - 1]
+                if multichannel and getattr(utt, "channel", None) is not None:
+                    # API types channel as string|null, 1-indexed ("1", "2", ...)
+                    ch = str(utt.channel)
+                    try:
+                        idx = int(ch)
+                    except ValueError:
+                        idx = None
+                    if channel_names and idx is not None and 1 <= idx <= len(channel_names):
+                        speaker = channel_names[idx - 1]
                     else:
                         speaker = f"Channel {ch}"
                 else:
@@ -215,4 +244,5 @@ class AssemblyAIProvider(TranscriptionProvider):
 
     @classmethod
     def required_extras(cls) -> str:
-        return "assemblyai"
+        # assemblyai is a core dependency, not an optional extra
+        return ""

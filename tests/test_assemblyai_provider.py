@@ -3,7 +3,30 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
-from transcribe_cli.providers.assemblyai import AssemblyAIProvider
+from transcribe_cli.providers.assemblyai import DEFAULT_REDACT_POLICIES, AssemblyAIProvider
+
+
+def _mock_transcript(utterances=None):
+    """A minimal successful transcript mock."""
+    transcript = MagicMock()
+    transcript.status = "completed"
+    transcript.text = "hello world"
+    transcript.utterances = utterances
+    transcript.get_sentences.return_value = []
+    transcript.language_code = "en_us"
+    transcript.audio_duration = 1000
+    transcript.id = "test-id"
+    return transcript
+
+
+def _transcribe_and_capture_config(mock_aai, **kwargs):
+    """Run transcribe() against a mocked SDK; return the TranscriptionConfig kwargs."""
+    mock_aai.Transcriber.return_value.transcribe.return_value = _mock_transcript(
+        utterances=kwargs.pop("_utterances", None)
+    )
+    provider = AssemblyAIProvider(api_key="test-key")
+    result = provider.transcribe("audio.mp3", **kwargs)
+    return mock_aai.TranscriptionConfig.call_args.kwargs, result
 
 
 def test_init_requires_api_key():
@@ -28,11 +51,84 @@ def test_is_available():
 
 
 def test_required_extras():
-    assert AssemblyAIProvider.required_extras() == "assemblyai"
+    # assemblyai is a core dependency, so no extras are required
+    assert AssemblyAIProvider.required_extras() == ""
 
 
 def test_name():
     assert AssemblyAIProvider.name == "assemblyai"
+
+
+@patch("transcribe_cli.providers.assemblyai.aai")
+def test_redact_pii_sends_default_policies(mock_aai):
+    cfg, _ = _transcribe_and_capture_config(mock_aai, redact_pii=True)
+    assert cfg["redact_pii"] is True
+    assert cfg["redact_pii_policies"] == DEFAULT_REDACT_POLICIES
+
+
+@patch("transcribe_cli.providers.assemblyai.aai")
+def test_redact_pii_explicit_policies(mock_aai):
+    cfg, _ = _transcribe_and_capture_config(
+        mock_aai, redact_pii=True, redact_policies=["person_name", "location"]
+    )
+    assert cfg["redact_pii_policies"] == ["person_name", "location"]
+
+
+@patch("transcribe_cli.providers.assemblyai.aai")
+def test_no_redact_pii_omits_policies(mock_aai):
+    cfg, _ = _transcribe_and_capture_config(mock_aai)
+    assert "redact_pii_policies" not in cfg
+
+
+@patch("transcribe_cli.providers.assemblyai.aai")
+def test_speaker_identification_request_shape(mock_aai):
+    cfg, _ = _transcribe_and_capture_config(
+        mock_aai, speaker_id_type="role", speaker_names=["Interviewer", "Interviewee"]
+    )
+    # API requires the "request" wrapper and speaker_labels enabled
+    assert cfg["speaker_labels"] is True
+    assert cfg["speech_understanding"] == {
+        "request": {
+            "speaker_identification": {
+                "speaker_type": "role",
+                "known_values": ["Interviewer", "Interviewee"],
+            }
+        }
+    }
+
+
+def _mock_utterance(channel, text="hi", start=0, end=1000):
+    utt = MagicMock()
+    utt.channel = channel
+    utt.text = text
+    utt.start = start
+    utt.end = end
+    utt.confidence = 0.9
+    utt.sentiment = None
+    return utt
+
+
+@patch("transcribe_cli.providers.assemblyai.aai")
+def test_multichannel_string_channels_map_to_names(mock_aai):
+    # API types channel as string, 1-indexed
+    _, result = _transcribe_and_capture_config(
+        mock_aai,
+        multichannel=True,
+        channel_names=["Me", "Them"],
+        _utterances=[_mock_utterance("1"), _mock_utterance("2")],
+    )
+    assert [s.speaker for s in result.segments] == ["Me", "Them"]
+
+
+@patch("transcribe_cli.providers.assemblyai.aai")
+def test_multichannel_out_of_range_channel_falls_back(mock_aai):
+    _, result = _transcribe_and_capture_config(
+        mock_aai,
+        multichannel=True,
+        channel_names=["Me", "Them"],
+        _utterances=[_mock_utterance("3"), _mock_utterance("left")],
+    )
+    assert [s.speaker for s in result.segments] == ["Channel 3", "Channel left"]
 
 
 @patch("transcribe_cli.providers.assemblyai.aai")
