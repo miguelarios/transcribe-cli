@@ -41,9 +41,19 @@ def test_list_providers_json(runner):
     assert "assemblyai" in names
 
 
-def test_no_audio_file_shows_error(runner):
+def test_no_args_shows_help_with_agent_note(runner):
+    # Bare invocation prints full help + agent note (like `td`), exit 0
     result = runner.invoke(cli, [])
-    assert result.exit_code != 0
+    assert result.exit_code == 0
+    assert "Usage:" in result.output
+    assert "Note for AI/LLM agents" in result.output
+
+
+def test_help_includes_agent_note(runner):
+    result = runner.invoke(cli, ["--help"])
+    assert result.exit_code == 0
+    assert "Note for AI/LLM agents" in result.output
+    assert "--summary" in result.output
 
 
 def test_missing_api_key_shows_error(runner):

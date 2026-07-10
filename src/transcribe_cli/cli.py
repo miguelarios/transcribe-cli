@@ -15,6 +15,19 @@ def _is_url(value: str) -> bool:
     return value.startswith("http://") or value.startswith("https://")
 
 
+AGENT_EPILOG = """\b
+Note for AI/LLM agents:
+  Use -f json for structured, parseable output (errors also emit JSON on stdout).
+  Use --summary to keep context small: prints metadata JSON (word/token counts,
+  speakers, duration) and writes the full transcript to a file instead of stdout.
+  Pair --summary with -o <path> to control where the transcript lands.
+  Transcript goes to stdout; progress/timing (-v) goes to stderr.
+  Exit codes: 0 success, 1 error, 130 interrupted.
+  Set ASSEMBLYAI_API_KEY env var instead of passing --api-key.
+  Use --list-providers -f json to discover available providers.
+"""
+
+
 def _emit_result(result, fmt: str, output: str | None, verbose: bool):
     """Format and write the transcription result."""
     if fmt == "json":
@@ -43,7 +56,8 @@ def _emit_result(result, fmt: str, output: str | None, verbose: bool):
         )
 
 
-@click.command(context_settings={"help_option_names": ["-h", "--help"]})
+@click.command(context_settings={"help_option_names": ["-h", "--help"]},
+               epilog=AGENT_EPILOG)
 @click.argument("audio", required=False)
 @click.option("--api-key", default=None, envvar="ASSEMBLYAI_API_KEY",
               help="AssemblyAI API key.  [env: ASSEMBLYAI_API_KEY]")
@@ -187,7 +201,10 @@ def cli(
 
     # -- Validate input --
     if audio is None:
-        raise click.UsageError("Missing argument 'AUDIO'. Use -h for usage.")
+        # Bare invocation: show full help (with agent note) instead of an error
+        ctx = click.get_current_context()
+        click.echo(ctx.get_help())
+        ctx.exit(0)
 
     # Validate speaker options (before file check so tests can use fake paths)
     if speakers_expected and (min_speakers or max_speakers):
