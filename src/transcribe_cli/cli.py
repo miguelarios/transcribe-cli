@@ -15,12 +15,108 @@ def _is_url(value: str) -> bool:
     return value.startswith("http://") or value.startswith("https://")
 
 
+def _run_doctor(api_key: str | None, fmt: str, offline: bool) -> int:
+    """Diagnose setup/environment issues. Returns process exit code."""
+    from transcribe_cli import __version__
+    from transcribe_cli.providers import list_providers as _list
+
+    checks: list[dict] = []
+
+    def check(name: str, status: str, message: str):
+        checks.append({"name": name, "status": status, "message": message})
+
+    # API key present
+    if api_key:
+        check("api_key", "pass", "API key found")
+    else:
+        check("api_key", "fail",
+              "No API key. Set ASSEMBLYAI_API_KEY env var or pass --api-key.")
+
+    # SDK installed
+    try:
+        import assemblyai
+
+        sdk_version = getattr(assemblyai, "__version__", "unknown")
+        check("sdk", "pass", f"assemblyai SDK {sdk_version} installed")
+    except ImportError:
+        check("sdk", "fail", "assemblyai SDK not installed")
+
+    # Providers registered and available
+    available = [p["name"] for p in _list() if p["available"]]
+    if available:
+        check("providers", "pass", f"available: {', '.join(available)}")
+    else:
+        check("providers", "fail", "no providers available")
+
+    # Network checks
+    if offline:
+        check("key_valid", "skip", "skipped (--offline)")
+        check("update", "skip", "skipped (--offline)")
+    else:
+        import httpx
+
+        if api_key:
+            try:
+                resp = httpx.get(
+                    "https://api.assemblyai.com/v2/transcript",
+                    params={"limit": 1},
+                    headers={"authorization": api_key},
+                    timeout=10,
+                )
+                if resp.status_code == 200:
+                    check("key_valid", "pass", "API key accepted by AssemblyAI")
+                elif resp.status_code == 401:
+                    check("key_valid", "fail", "API key rejected by AssemblyAI (401)")
+                else:
+                    check("key_valid", "warn",
+                          f"unexpected response from AssemblyAI: {resp.status_code}")
+            except Exception as e:  # network unreachable, DNS, timeout, ...
+                check("key_valid", "warn", f"could not reach AssemblyAI: {e}")
+        else:
+            check("key_valid", "skip", "skipped (no API key)")
+
+        try:
+            resp = httpx.get("https://pypi.org/pypi/transcriber-cli/json", timeout=10)
+            latest = resp.json()["info"]["version"]
+            if str(latest) == __version__:
+                check("update", "pass", f"up to date ({__version__})")
+            else:
+                check("update", "warn", f"update available: {__version__} -> {latest}")
+        except Exception as e:
+            check("update", "warn", f"could not check PyPI for updates: {e}")
+
+    summary = {
+        "passed": sum(1 for c in checks if c["status"] == "pass"),
+        "warned": sum(1 for c in checks if c["status"] == "warn"),
+        "failed": sum(1 for c in checks if c["status"] == "fail"),
+        "skipped": sum(1 for c in checks if c["status"] == "skip"),
+    }
+    ok = summary["failed"] == 0
+
+    if fmt == "json":
+        click.echo(json.dumps(
+            {"ok": ok, "summary": summary, "checks": checks}, indent=2))
+    else:
+        for c in checks:
+            click.echo(f"[{c['status']:>4}] {c['name']}: {c['message']}")
+        click.echo(
+            f"\n{summary['passed']} passed, {summary['warned']} warned, "
+            f"{summary['failed']} failed, {summary['skipped']} skipped"
+        )
+    return 0 if ok else 1
+
+
 AGENT_EPILOG = """\b
 Note for AI/LLM agents:
-  Use -f json for structured, parseable output (errors also emit JSON on stdout).
+  Use -f json for structured output (errors also emit JSON on stdout), or
+  -f ndjson for one JSON object per segment (stream/grep-friendly).
   Use --summary to keep context small: prints metadata JSON (word/token counts,
   speakers, duration) and writes the full transcript to a file instead of stdout.
   Pair --summary with -o <path> to control where the transcript lands.
+  Use --dry-run to validate flags and preview the resolved provider config
+  as JSON without an API key, network, or credits.
+  Use --doctor [-f json] [--offline] to diagnose setup (API key, SDK, network).
+  Use --progress-jsonl [path] for JSONL progress events (long jobs are not hung).
   Transcript goes to stdout; progress/timing (-v) goes to stderr.
   Exit codes: 0 success, 1 error, 130 interrupted.
   Set ASSEMBLYAI_API_KEY env var instead of passing --api-key.
@@ -28,16 +124,31 @@ Note for AI/LLM agents:
 """
 
 
+def _jsonable(obj):
+    """JSON serializer for SDK objects (enums, pydantic models)."""
+    if hasattr(obj, "dict"):
+        return obj.dict()
+    if hasattr(obj, "value"):
+        return obj.value
+    return str(obj)
+
+
+def _format_content(result, fmt: str) -> str:
+    """Render a TranscriptionResult in the requested output format."""
+    if fmt == "json":
+        return json.dumps(result.to_dict(), indent=2, ensure_ascii=False)
+    if fmt == "ndjson":
+        return result.to_ndjson()
+    if fmt == "srt":
+        return result.to_srt()
+    if fmt == "vtt":
+        return result.to_vtt()
+    return result.to_text()
+
+
 def _emit_result(result, fmt: str, output: str | None, verbose: bool):
     """Format and write the transcription result."""
-    if fmt == "json":
-        content = json.dumps(result.to_dict(), indent=2, ensure_ascii=False)
-    elif fmt == "srt":
-        content = result.to_srt()
-    elif fmt == "vtt":
-        content = result.to_vtt()
-    else:
-        content = result.to_text()
+    content = _format_content(result, fmt)
 
     if output:
         Path(output).write_text(content, encoding="utf-8")
@@ -62,7 +173,7 @@ def _emit_result(result, fmt: str, output: str | None, verbose: bool):
 @click.option("--api-key", default=None, envvar="ASSEMBLYAI_API_KEY",
               help="AssemblyAI API key.  [env: ASSEMBLYAI_API_KEY]")
 @click.option("-f", "--format", "output_format",
-              type=click.Choice(["text", "json", "srt", "vtt"]),
+              type=click.Choice(["text", "json", "ndjson", "srt", "vtt"]),
               default="text", show_default=True,
               help="Output format.")
 @click.option("-o", "--output", type=click.Path(), default=None,
@@ -133,6 +244,18 @@ def _emit_result(result, fmt: str, output: str | None, verbose: bool):
 @click.option("--no-format-text", is_flag=True, default=False,
               help="Disable text formatting. [API: format_text=false]")
 # Meta
+@click.option("--progress-jsonl", "progress_jsonl",
+              is_flag=False, flag_value="-", default=None,
+              help="Emit progress events as JSONL. Bare flag writes to stderr; "
+                   "pass a path to write to a file instead.")
+@click.option("--dry-run", is_flag=True, default=False,
+              help="Print the resolved provider config as JSON and exit without "
+                   "transcribing. No API key or network needed.")
+@click.option("--doctor", is_flag=True, default=False,
+              help="Diagnose setup issues (API key, SDK, connectivity) and exit. "
+                   "Combine with -f json for structured output.")
+@click.option("--offline", is_flag=True, default=False,
+              help="Skip network checks (use with --doctor).")
 @click.option("--list-providers", is_flag=True, default=False,
               help="List available transcription providers and exit.")
 @click.option("-v", "--verbose", is_flag=True, default=False,
@@ -170,6 +293,10 @@ def cli(
     keyterms,
     no_punctuate,
     no_format_text,
+    progress_jsonl,
+    dry_run,
+    doctor,
+    offline,
     list_providers,
     verbose,
 ):
@@ -186,6 +313,10 @@ def cli(
         transcribe lecture.mp3 -f srt -o lecture.srt
         transcribe https://example.com/audio.mp3
     """
+    # -- Doctor mode --
+    if doctor:
+        sys.exit(_run_doctor(api_key, output_format, offline))
+
     # -- List providers mode --
     if list_providers:
         from transcribe_cli.providers import list_providers as _list
@@ -231,6 +362,58 @@ def cli(
     if not _is_url(audio) and not Path(audio).exists():
         raise click.UsageError(f"File not found: {audio}")
 
+    options = {
+        "language": language,
+        "speaker_labels": speaker_labels,
+        "speakers_expected": speakers_expected,
+        "min_speakers": min_speakers,
+        "max_speakers": max_speakers,
+        "speaker_id_type": speaker_id_type,
+        "speaker_names": list(speaker_names) if speaker_names else None,
+        "sentiment": sentiment,
+        "entities": entities,
+        "topics": topics,
+        "auto_chapters": auto_chapters,
+        "summarize": summarize,
+        "summary_model": summary_model,
+        "summary_type": summary_type,
+        "content_safety": content_safety,
+        "multichannel": multichannel,
+        "channel_names": list(channel_names) if channel_names else None,
+        "redact_pii": redact_pii,
+        "redact_policies": list(redact_policies) if redact_policies else None,
+        "filter_profanity": filter_profanity,
+        "disfluencies": disfluencies,
+        "prompt": prompt,
+        "keyterms": list(keyterms) if keyterms else None,
+        "punctuate": not no_punctuate,
+        "format_text": not no_format_text,
+        "language_detection": language_detection,
+    }
+
+    # -- Dry-run mode: resolve and print the config, no API key or network --
+    if dry_run:
+        from transcribe_cli.providers.assemblyai import AssemblyAIProvider
+
+        config = AssemblyAIProvider.build_config_kwargs(**options)
+        click.echo(json.dumps(
+            {"provider": "assemblyai", "audio": audio, "config": config},
+            indent=2, ensure_ascii=False, default=_jsonable,
+        ))
+        return
+
+    # Progress events as JSONL to stderr ("-") or a file
+    if progress_jsonl:
+        def _emit_progress(event: dict):
+            line = json.dumps(event, ensure_ascii=False)
+            if progress_jsonl == "-":
+                click.echo(line, err=True)
+            else:
+                with open(progress_jsonl, "a", encoding="utf-8") as f:
+                    f.write(line + "\n")
+
+        options["progress_callback"] = _emit_progress
+
     # Validate API key
     if not api_key:
         raise click.UsageError(
@@ -251,49 +434,11 @@ def cli(
             source = Path(audio).name if not _is_url(audio) else audio
             click.echo(f"Transcribing {source}...", err=True)
 
-        result = provider.timed_transcribe(
-            audio,
-            language=language,
-            speaker_labels=speaker_labels,
-            speakers_expected=speakers_expected,
-            min_speakers=min_speakers,
-            max_speakers=max_speakers,
-            speaker_id_type=speaker_id_type,
-            speaker_names=list(speaker_names) if speaker_names else None,
-            sentiment=sentiment,
-            entities=entities,
-            topics=topics,
-            auto_chapters=auto_chapters,
-            summarize=summarize,
-            summary_model=summary_model,
-            summary_type=summary_type,
-            content_safety=content_safety,
-            multichannel=multichannel,
-            channel_names=list(channel_names) if channel_names else None,
-            redact_pii=redact_pii,
-            redact_policies=list(redact_policies) if redact_policies else None,
-            filter_profanity=filter_profanity,
-            disfluencies=disfluencies,
-            prompt=prompt,
-            keyterms=list(keyterms) if keyterms else None,
-            punctuate=not no_punctuate,
-            format_text=not no_format_text,
-            language_detection=language_detection,
-        )
+        result = provider.timed_transcribe(audio, **options)
 
         if summary_mode:
             # Format the transcript content for the output file
-            if output:
-                if output_format == "json":
-                    content = json.dumps(result.to_dict(), indent=2, ensure_ascii=False)
-                elif output_format == "srt":
-                    content = result.to_srt()
-                elif output_format == "vtt":
-                    content = result.to_vtt()
-                else:
-                    content = result.to_text()
-            else:
-                content = None
+            content = _format_content(result, output_format) if output else None
             click.echo(json.dumps(result.to_summary(output_path=output, output_content=content), indent=2))
         else:
             _emit_result(result, output_format, output, verbose)

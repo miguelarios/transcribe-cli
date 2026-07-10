@@ -69,6 +69,7 @@ transcribe https://example.com/audio.mp3
 |--------|------|-------------|
 | text | `-f text` (default) | Timestamped text with optional speaker labels |
 | json | `-f json` | Full structured data (segments, metadata, entities) |
+| ndjson | `-f ndjson` | One JSON object per segment line (stream/grep-friendly) |
 | srt | `-f srt` | SRT subtitle format |
 | vtt | `-f vtt` | WebVTT subtitle format |
 
@@ -100,20 +101,48 @@ Run `transcribe -h` for the full list. Key options:
 - `--keyterms TERM` — Domain-specific terms to boost (repeatable)
 - `--multichannel` — Multichannel transcription
 - `--redact-pii` — Redact personally identifiable information
+- `--redact-policies POLICY` — PII policies to redact (repeatable; defaults to a common-PII set)
 - `--filter-profanity` — Filter profanity
 - `--disfluencies` — Include filler words (um, uh)
 
 ### Output
-- `-f, --format [text|json|srt|vtt]` — Output format
+- `-f, --format [text|json|ndjson|srt|vtt]` — Output format
 - `-o, --output PATH` — Write to file instead of stdout
 - `--summary` — Output metadata summary, save full transcript to temp file
+- `--progress-jsonl [PATH]` — Emit JSONL progress events to stderr (bare) or a file
 - `-v, --verbose` — Show progress and timing on stderr
 
 ### Meta
+- `--dry-run` — Print the resolved provider config as JSON; no API key or network needed
+- `--doctor` — Diagnose setup issues (`-f json` for structured output, `--offline` to skip network checks)
 - `--list-providers` — List available transcription providers
 - `--api-key KEY` — AssemblyAI API key
 - `-V, --version` — Show version
 - `-h, --help` — Show help
+
+## Agent-Friendly Design
+
+Built to be driven by AI agents as well as humans:
+
+```bash
+# Validate a flag combo without spending credits
+transcribe call.mp3 --speaker-labels --redact-pii --dry-run
+
+# Self-diagnose setup problems, machine-readable
+transcribe --doctor -f json
+
+# Long job? Progress events prove it isn't hung
+transcribe podcast.mp3 --progress-jsonl events.jsonl -o out.txt
+
+# Keep agent context small: metadata to stdout, transcript to file
+transcribe meeting.mp3 --summary -o meeting.md
+
+# One JSON object per segment, pipe-friendly
+transcribe call.mp3 --speaker-labels -f ndjson | grep '"speaker": "A"'
+```
+
+Errors emit JSON on stdout when `-f json`/`-f ndjson` is set. Bare `transcribe`
+prints full help including an agent usage note.
 
 ## Development
 

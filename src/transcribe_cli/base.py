@@ -34,21 +34,22 @@ class TranscriptionResult:
     elapsed_seconds: float = 0.0
     metadata: dict = field(default_factory=dict)
 
+    @staticmethod
+    def _segment_dict(s: Segment) -> dict:
+        return {
+            "text": s.text,
+            "start": s.start,
+            "end": s.end,
+            **({"speaker": s.speaker} if s.speaker else {}),
+            **({"confidence": s.confidence} if s.confidence is not None else {}),
+            **({"sentiment": s.sentiment} if s.sentiment is not None else {}),
+        }
+
     def to_dict(self) -> dict:
         """Serialize to a plain dict for JSON output."""
         return {
             "text": self.text,
-            "segments": [
-                {
-                    "text": s.text,
-                    "start": s.start,
-                    "end": s.end,
-                    **({"speaker": s.speaker} if s.speaker else {}),
-                    **({"confidence": s.confidence} if s.confidence is not None else {}),
-                    **({"sentiment": s.sentiment} if s.sentiment is not None else {}),
-                }
-                for s in self.segments
-            ],
+            "segments": [self._segment_dict(s) for s in self.segments],
             "language": self.language,
             "duration_seconds": self.duration_seconds,
             "provider": self.provider,
@@ -109,6 +110,14 @@ class TranscriptionResult:
             lines.append(text)
             lines.append("")
         return "\n".join(lines)
+
+    def to_ndjson(self) -> str:
+        """Render segments as newline-delimited JSON, one object per line."""
+        if not self.segments:
+            return json.dumps({"text": self.text}, ensure_ascii=False)
+        return "\n".join(
+            json.dumps(self._segment_dict(s), ensure_ascii=False) for s in self.segments
+        )
 
     def to_summary(self, output_path: str | None = None, output_content: str | None = None) -> dict:
         """Generate agent-friendly summary metadata, save full transcript to file.

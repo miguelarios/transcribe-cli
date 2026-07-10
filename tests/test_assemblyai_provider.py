@@ -97,6 +97,58 @@ def test_speaker_identification_request_shape(mock_aai):
     }
 
 
+@patch("transcribe_cli.providers.assemblyai.time")
+@patch("transcribe_cli.providers.assemblyai.aai")
+def test_progress_callback_switches_to_submit_and_poll(mock_aai, mock_time):
+    submitted = MagicMock()
+    submitted.id = "t1"
+    submitted.status = "queued"
+    processing = MagicMock()
+    processing.id = "t1"
+    processing.status = "processing"
+    done = _mock_transcript()
+    done.status = mock_aai.TranscriptStatus.completed
+
+    mock_aai.Transcriber.return_value.submit.return_value = submitted
+    mock_aai.Transcript.get_by_id.side_effect = [processing, done]
+
+    events = []
+    provider = AssemblyAIProvider(api_key="test-key")
+    result = provider.transcribe("audio.mp3", progress_callback=events.append)
+
+    # Blocking transcribe() must not be used when polling
+    mock_aai.Transcriber.return_value.transcribe.assert_not_called()
+    assert result.text == "hello world"
+    names = [e["event"] for e in events]
+    assert names == ["uploading", "submitted", "status", "completed"]
+    assert events[1]["id"] == "t1"
+
+
+@patch("transcribe_cli.providers.assemblyai.time")
+@patch("transcribe_cli.providers.assemblyai.aai")
+def test_progress_callback_url_skips_uploading_event(mock_aai, mock_time):
+    done = _mock_transcript()
+    done.status = mock_aai.TranscriptStatus.completed
+    done.id = "t2"
+    mock_aai.Transcriber.return_value.submit.return_value = done
+
+    events = []
+    provider = AssemblyAIProvider(api_key="test-key")
+    provider.transcribe("https://example.com/a.mp3", progress_callback=events.append)
+
+    names = [e["event"] for e in events]
+    assert names == ["submitted", "completed"]
+
+
+@patch("transcribe_cli.providers.assemblyai.aai")
+def test_no_progress_callback_uses_blocking_transcribe(mock_aai):
+    mock_aai.Transcriber.return_value.transcribe.return_value = _mock_transcript()
+    provider = AssemblyAIProvider(api_key="test-key")
+    provider.transcribe("audio.mp3")
+    mock_aai.Transcriber.return_value.transcribe.assert_called_once()
+    mock_aai.Transcriber.return_value.submit.assert_not_called()
+
+
 def _mock_utterance(channel, text="hi", start=0, end=1000):
     utt = MagicMock()
     utt.channel = channel

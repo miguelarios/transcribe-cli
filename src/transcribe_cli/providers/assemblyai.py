@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 
 import assemblyai as aai
@@ -46,12 +47,11 @@ class AssemblyAIProvider(TranscriptionProvider):
                 "or pass --api-key <key>"
             )
 
-    def transcribe(
-        self,
-        audio_path: str | Path,
+    @classmethod
+    def build_config_kwargs(
+        cls,
         *,
         language: str | None = None,
-        timestamps: bool = True,
         speaker_labels: bool = False,
         speakers_expected: int | None = None,
         min_speakers: int | None = None,
@@ -77,9 +77,12 @@ class AssemblyAIProvider(TranscriptionProvider):
         format_text: bool = True,
         language_detection: bool = False,
         **kwargs,
-    ) -> TranscriptionResult:
-        aai.settings.api_key = self.api_key
+    ) -> dict:
+        """Resolve CLI options into AssemblyAI TranscriptionConfig kwargs.
 
+        Classmethod so callers (e.g. --dry-run) can resolve the config
+        without an API key. Unknown kwargs are ignored.
+        """
         config_kwargs: dict = {
             "speaker_labels": speaker_labels,
             "sentiment_analysis": sentiment,
@@ -148,17 +151,76 @@ class AssemblyAIProvider(TranscriptionProvider):
                 }
             }
 
+        return config_kwargs
+
+    _POLL_INTERVAL_SECONDS = 3.0
+
+    @staticmethod
+    def _status_str(status) -> str:
+        return getattr(status, "value", None) or str(status)
+
+    def _transcribe_with_progress(self, transcriber, audio_str: str, config, callback):
+        """Submit and poll, emitting progress events via callback."""
+        if not audio_str.startswith(("http://", "https://")):
+            callback({"event": "uploading", "file": audio_str})
+        transcript = transcriber.submit(audio_str, config=config)
+        callback({
+            "event": "submitted",
+            "id": transcript.id,
+            "status": self._status_str(transcript.status),
+        })
+
+        terminal = (aai.TranscriptStatus.completed, aai.TranscriptStatus.error)
+        last_status = transcript.status
+        while transcript.status not in terminal:
+            time.sleep(self._POLL_INTERVAL_SECONDS)
+            transcript = aai.Transcript.get_by_id(transcript.id)
+            if transcript.status != last_status and transcript.status not in terminal:
+                callback({"event": "status", "status": self._status_str(transcript.status)})
+                last_status = transcript.status
+
+        if transcript.status == aai.TranscriptStatus.error:
+            callback({"event": "error", "error": str(transcript.error)})
+        else:
+            callback({"event": "completed", "id": transcript.id})
+        return transcript
+
+    def transcribe(
+        self,
+        audio_path: str | Path,
+        *,
+        timestamps: bool = True,
+        **options,
+    ) -> TranscriptionResult:
+        aai.settings.api_key = self.api_key
+
+        progress_callback = options.pop("progress_callback", None)
+        config_kwargs = self.build_config_kwargs(**options)
+        speaker_labels = config_kwargs["speaker_labels"]
+        multichannel = config_kwargs["multichannel"]
+        sentiment = config_kwargs["sentiment_analysis"]
+        entities = config_kwargs["entity_detection"]
+        topics = config_kwargs["iab_categories"]
+        auto_chapters = config_kwargs["auto_chapters"]
+        content_safety = config_kwargs["content_safety"]
+        summarize = config_kwargs.get("summarization", False)
+
         config = aai.TranscriptionConfig(**config_kwargs)
         transcriber = aai.Transcriber()
 
         audio_str = str(audio_path)
-        transcript = transcriber.transcribe(audio_str, config=config)
+        if progress_callback:
+            transcript = self._transcribe_with_progress(
+                transcriber, audio_str, config, progress_callback
+            )
+        else:
+            transcript = transcriber.transcribe(audio_str, config=config)
 
         if transcript.status == aai.TranscriptStatus.error:
             raise RuntimeError(f"AssemblyAI error: {transcript.error}")
 
         # Build segments from utterances (if speaker_labels or multichannel) or sentences
-        channel_names = kwargs.get("channel_names")
+        channel_names = options.get("channel_names")
         segments = []
         if timestamps and (speaker_labels or multichannel) and transcript.utterances:
             for utt in transcript.utterances:

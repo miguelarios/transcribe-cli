@@ -119,6 +119,34 @@ def test_to_text_no_segments_returns_text():
     assert result.to_text() == "Just text"
 
 
+def test_to_ndjson_one_object_per_segment():
+    import json
+
+    result = TranscriptionResult(
+        text="Hi. Hey.",
+        segments=[
+            Segment(text="Hi.", start=0.0, end=1.0, speaker="A", confidence=0.9),
+            Segment(text="Hey.", start=1.5, end=2.5, speaker="B"),
+        ],
+    )
+    lines = result.to_ndjson().splitlines()
+    assert len(lines) == 2
+    first = json.loads(lines[0])
+    assert first == {"text": "Hi.", "start": 0.0, "end": 1.0, "speaker": "A", "confidence": 0.9}
+    second = json.loads(lines[1])
+    assert second["speaker"] == "B"
+    assert "confidence" not in second
+
+
+def test_to_ndjson_no_segments_falls_back_to_text():
+    import json
+
+    result = TranscriptionResult(text="Just text")
+    lines = result.to_ndjson().splitlines()
+    assert len(lines) == 1
+    assert json.loads(lines[0]) == {"text": "Just text"}
+
+
 def test_to_summary():
     result = TranscriptionResult(
         text="Hello world this is a test with some words",
