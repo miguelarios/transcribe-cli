@@ -74,3 +74,79 @@ All AssemblyAI tests use mocking — no real API calls needed.
 3. Decorate with `@register`
 4. Add import to `_auto_discover()` in `providers/__init__.py`
 5. Add dependency to `pyproject.toml` as optional extra
+
+## Filing issues and PRs
+
+This repo inherits issue and PR templates from `miguelarios/.github`. They are
+**not** in this checkout — GitHub does not include default community health
+files in clones. Resolve them through the API; never freehand the body.
+
+Routing table: https://github.com/miguelarios/.github/blob/main/CONTRIBUTING.md
+
+Issues — pick by situation:
+
+| Template | Use for | Label |
+| --- | --- | --- |
+| `-T Bug` | Wrong behavior. Needs expected vs actual, repro steps, logs, version, OS. | `bug` |
+| `-T Feature` | New capability. Needs a problem statement naming who is blocked, plus alternatives. | `enhancement` |
+| `-T Chore` | Chore, refactor, bump, deploy. Needs acceptance criteria and rollback. | `chore` |
+| `-T Docs` | Docs wrong or missing. Needs exact path, expected vs actual. | `documentation` |
+
+```bash
+gh issue create -T Bug --title "fix: <symptom> when <trigger>" --label bug
+gh pr create -T pull_request_template.md --title "fix: <user-visible description>"
+```
+
+Do **not** file an issue for a question or an undecided observation. Raise it in
+the working thread instead.
+
+Rules for every issue and PR here:
+
+- Titles use Conventional Commit prefixes: `feat`, `fix`, `refactor`, `chore`,
+  `docs`, `build`. Describe the user-visible effect, not the implementation.
+- PRs carry a visible `Closes #<issue>` line.
+- The verification section holds the real command and its real output. Never
+  write "tested locally" or claim a passing test without pasting it. State
+  explicitly what could not be verified.
+- Redact tokens, API keys, and internal hostnames before pasting logs.
+
+## Filing issues and PRs
+
+Issue and PR templates are inherited from `miguelarios/.github`. They are **not**
+in this checkout — GitHub does not include default community health files in
+clones. Resolve them through the API; never freehand the body.
+
+Routing table: https://github.com/miguelarios/.github/blob/main/CONTRIBUTING.md
+
+| Template | Use for | Label |
+| --- | --- | --- |
+| `-T Bug` | Wrong behavior. Needs expected vs actual, repro steps, logs, version, OS. | `bug` |
+| `-T Feature` | New capability. Needs a problem statement naming who is blocked, plus alternatives. | `enhancement` |
+| `-T Chore` | Chore, refactor, bump, deploy. Needs acceptance criteria and rollback. | `chore` |
+| `-T Docs` | Docs wrong or missing. Needs exact path, expected vs actual. | `documentation` |
+
+```bash
+gh issue create -T Bug --title "fix: <symptom> when <trigger>" --label bug
+gh pr create -T PULL_REQUEST_TEMPLATE.md --title "fix: <user-visible description>"
+```
+
+Template names are case-sensitive. Confirm what this repo actually resolves
+before passing `-T`:
+
+```bash
+gh api graphql -f query='{ repository(owner:"miguelarios", name:"transcribe-cli") {
+  issueTemplates { name } pullRequestTemplates { filename } } }'
+```
+
+Do **not** file an issue for a question or an undecided observation. Raise it in
+the working thread instead.
+
+Rules for every issue and PR here:
+
+- Titles use Conventional Commit prefixes: `feat`, `fix`, `refactor`, `chore`,
+  `docs`, `build`. Describe the user-visible effect, not the implementation.
+- PRs carry a visible `Closes #<issue>` line.
+- The verification section holds the real command and its real output. Never
+  write "tested locally" or claim a passing test without pasting it. State
+  explicitly what could not be verified.
+- Redact tokens, API keys, and internal hostnames before pasting logs.
